@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chấm Điểm Phát Âm Tiếng Trung Phồn Thể</title>
+    <!-- Tailwind CSS để giao diện đẹp và nhanh -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style>
+        .correct { color: #10B981; font-weight: bold; } /* Xanh lá */
+        .incorrect { color: #EF4444; font-weight: bold; } /* Đỏ */
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col items-center justify-center p-4 font-sans">
+
+    <div class="bg-white p-8 rounded-2xl shadow-xl max-w-xl w-full text-center">
+        <h1 class="text-2xl font-bold text-gray-800 mb-6">🎙️ Luyện Phát Âm Tiếng Trung (Phồn Thể)</h1>
+
+        <!-- Chọn Cấp Độ -->
+        <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-600 mb-2">Chọn cấp độ:</label>
+            <div class="inline-flex rounded-md shadow-xs">
+                <button onclick="changeLevel(1)" id="btn-lvl-1" class="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-l-lg border border-blue-600">Cấp độ 1 (1 từ)</button>
+                <button onclick="changeLevel(2)" id="btn-lvl-2" class="px-4 py-2 text-sm font-medium bg-white text-gray-700 border-t border-b border-gray-200 hover:bg-gray-50">Cấp độ 2 (2 từ)</button>
+                <button onclick="changeLevel(3)" id="btn-lvl-3" class="px-4 py-2 text-sm font-medium bg-white text-gray-700 rounded-r-lg border border-gray-200 hover:bg-gray-50">Cấp độ 3 (3 từ)</button>
+            </div>
+        </div>
+
+        <hr class="border-gray-200 my-6">
+
+        <!-- Hiển thị Từ Vựng -->
+        <div class="bg-gray-50 p-6 rounded-xl mb-6 min-h-[160px] flex flex-col justify-center items-center">
+            <div id="pinyin-display" class="text-xl text-blue-500 font-medium tracking-wide mb-2">mǎ</div>
+            <div id="word-display" class="text-5xl font-bold text-gray-800 tracking-widest mb-2">馬</div>
+            <div id="meaning-display" class="text-sm text-gray-500 italic">(Con ngựa)</div>
+        </div>
+
+        <!-- Nút Điều Hướng Từ Vựng -->
+        <div class="flex justify-between px-4 mb-6">
+            <button onclick="prevWord()" class="text-sm text-gray-600 hover:text-blue-600 font-medium">← Từ trước</button>
+            <button onclick="nextWord()" class="text-sm text-gray-600 hover:text-blue-600 font-medium">Từ tiếp theo →</button>
+        </div>
+
+        <!-- Nút Thu Âm -->
+        <div class="mb-6">
+            <button id="record-btn" onclick="toggleRecording()" class="w-20 h-20 bg-red-500 hover:bg-red-600 text-white rounded-full flex items-center justify-center text-3xl shadow-lg transition-all transform hover:scale-105 mx-auto focus:outline-none">
+                🎤
+            </button>
+            <p id="status-text" class="text-sm text-gray-500 mt-2 font-medium">Nhấn nút để bắt đầu nói</p>
+        </div>
+
+        <!-- Kết Quả Chấm Điểm -->
+        <div id="result-box" class="hidden bg-gray-50 p-4 rounded-xl border border-gray-200 transition-all">
+            <div class="text-lg font-semibold text-gray-700 mb-2">Kết quả của bạn:</div>
+            <div id="comparison-display" class="text-3xl font-bold tracking-widest mb-2"></div>
+            <div class="text-sm text-gray-600">
+                Độ chính xác: <span id="accuracy-percent" class="text-xl font-bold text-blue-600">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Kho dữ liệu từ vựng Phồn Thể phân theo cấp độ
+        const vocabulary = {
+            1: [
+                { word: "馬", pinyin: "mǎ", meaning: "Con ngựa" },
+                { word: "書", pinyin: "shū", meaning: "Sách" },
+                { word: "車", pinyin: "chē", meaning: "Xe cộ" },
+                { word: "貓", pinyin: "māo", meaning: "Con mèo" }
+            ],
+            2: [
+                { word: "謝謝", pinyin: "xièxie", meaning: "Cảm ơn" },
+                { word: "高興", pinyin: "gāoxìng", meaning: "Vui vẻ" },
+                { word: "學習", pinyin: "xuéxí", meaning: "Học tập" },
+                { word: "台灣", pinyin: "táiwān", meaning: "Đài Loan" }
+            ],
+            3: [
+                { word: "圖書館", pinyin: "túshūguǎn", meaning: "Thư viện" },
+                { word: "葡萄牙", pinyin: "pútáoyá", meaning: "Bồ Đào Nha" },
+                { word: "計算機", pinyin: "jìsuànjī", meaning: "Máy tính" },
+                { word: "Picasso", pinyin: "bìjiāsuǒ", meaning: "Danh họa Tất-ca-sách (毕加索)" } // 畢加索
+            ]
+        };
+
+        // Thêm từ 3 chữ chuẩn phồn thể hơn để tránh nhầm lẫn
+        vocabulary[3][3] = { word: "畢加索", pinyin: "bìjiāsuǒ", meaning: "Danh họa Picasso" };
+
+        let currentLevel = 1;
+        let currentIndex = 0;
+        let isRecording = false;
+
+        // Cấu hình Speech Recognition
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.lang = 'zh-TW'; // Tiếng Trung giọng Đài Loan (mặc định nhận diện chữ Phồn Thể tốt nhất)
+            recognition.interimResults = false;
+            recognition.maxAlternatives = 1;
+
+            recognition.onstart = () => {
+                isRecording = true;
+                document.getElementById('record-btn').classList.replace('bg-red-500', 'bg-green-500');
+                document.getElementById('status-text').innerText = "กำลังฟัง... Hãy nói to, rõ ràng!";
+                document.getElementById('status-text').innerText = "Đang nghe... Hãy nói to, rõ ràng!";
+            };
+
+            recognition.onend = () => {
+                isRecording = false;
+                document.getElementById('record-btn').classList.replace('bg-green-500', 'bg-red-500');
+                document.getElementById('status-text').innerText = "Nhấn nút để bắt đầu nói";
+            };
+
+            recognition.onresult = (event) => {
+                const resultText = event.results[0][0].transcript.trim();
+                analyzePronunciation(resultText);
+            };
+
+            recognition.onerror = (event) => {
+                alert("Đã xảy ra lỗi nhận diện: " + event.error);
+            };
+        } else {
+            alert("Trình duyệt của bạn không hỗ trợ nhận diện giọng nói. Hãy dùng Google Chrome!");
+        }
+
+        // Cập nhật từ vựng hiển thị lên màn hình
+        function updateWord() {
+            const currentWordObj = vocabulary[currentLevel][currentIndex];
+            document.getElementById('word-display').innerText = currentWordObj.word;
+            document.getElementById('pinyin-display').innerText = currentWordObj.pinyin;
+            document.getElementById('meaning-display').innerText = `(${currentWordObj.meaning})`;
+            document.getElementById('result-box').classList.add('hidden');
+        }
+
+        // Chuyển đổi cấp độ
+        function changeLevel(level) {
+            currentLevel = level;
+            currentIndex = 0;
+            
+            // Cập nhật giao diện nút
+            for (let i = 1; i <= 3; i++) {
+                const btn = document.getElementById(`btn-lvl-${i}`);
+                if (i === level) {
+                    btn.className = "px-4 py-2 text-sm font-medium bg-blue-600 text-white border border-blue-600 " + (i===1?'rounded-l-lg':i===3?'rounded-r-lg':'');
+                } else {
+                    btn.className = "px-4 py-2 text-sm font-medium bg-white text-gray-700 border border-gray-200 hover:bg-gray-50 " + (i===1?'rounded-l-lg':i===3?'rounded-r-lg':'');
+                }
+            }
+            updateWord();
+        }
+
+        function nextWord() {
+            if (currentIndex < vocabulary[currentLevel].length - 1) {
+                currentIndex++;
+                updateWord();
+            } else {
+                alert("Bạn đã hoàn thành hết từ vựng ở cấp độ này!");
+            }
+        }
+
+        function prevWord() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                updateWord();
+            }
+        }
+
+        function toggleRecording() {
+            if (!recognition) return;
+            if (isRecording) {
+                recognition.stop();
+            } else {
+                recognition.start();
+            }
+        }
+
+        // Phân tích và chấm điểm phát âm
+        function analyzePronunciation(spokenText) {
+            const targetWord = vocabulary[currentLevel][currentIndex].word;
+            let displayHTML = "";
+            let correctCount = 0;
+
+            // Kiểm tra từng ký tự
+            for (let i = 0; i < targetWord.length; i++) {
+                const targetChar = targetWord[i];
+                // Nếu ký tự đích có xuất hiện trong chuỗi người dùng nói
+                if (spokenText.includes(targetChar)) {
+                    displayHTML += `<span class="correct">${targetChar}</span>`;
+                    correctCount++;
+                } else {
+                    displayHTML += `<span class="incorrect">${targetChar}</span>`;
+                }
+            }
+
+            // Tính toán phần trăm chính xác
+            const accuracy = Math.round((correctCount / targetWord.length) * 100);
+
+            // Hiển thị kết quả lên giao diện
+            document.getElementById('comparison-display').innerHTML = displayHTML;
+            document.getElementById('accuracy-percent').innerText = accuracy + "%";
+            
+            // Đổi màu phần trăm theo kết quả
+            const percentElement = document.getElementById('accuracy-percent');
+            if(accuracy === 100) {
+                percentElement.className = "text-xl font-bold text-green-600";
+            } else if (accuracy >= 50) {
+                percentElement.className = "text-xl font-bold text-yellow-500";
+            } else {
+                percentElement.className = "text-xl font-bold text-red-500";
+            }
+
+            document.getElementById('result-box').classList.remove('hidden');
+        }
+
+        // Khởi chạy lần đầu tiên
+        updateWord();
+    </script>
+</body>
+</html>
